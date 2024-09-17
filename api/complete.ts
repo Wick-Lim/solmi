@@ -1,4 +1,4 @@
-import { Copilot, registerCopilot } from "monacopilot";
+import { Copilot } from "monacopilot";
 import { VercelRequest, VercelResponse } from "@vercel/node";
 
 const copilot = new Copilot(process.env.OPENAI_API_KEY!, {
