@@ -10,7 +10,12 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
     "@monaco-editor/react": "^4.6.0",
+    "@mui/icons-material": "^6.1.0",
+    "@mui/material": "^6.1.0",
+    "@mui/x-tree-view": "^7.17.0",
     "@tauri-apps/api": "^1",
     "monacopilot": "^0.9.31",
     "react": "^18.2.0",
