@@ -1,12 +1,12 @@
 import Editor from "@monaco-editor/react";
-import { Box, Button, ButtonBase, Divider, Tab, Tabs, Typography, useTheme } from "@mui/material";
-import { RichTreeView, TreeItem2, TreeItem2IconContainer, TreeViewBaseItem } from "@mui/x-tree-view";
+import { Article, Folder, FolderOpen } from "@mui/icons-material";
+import { Box, ButtonBase, Divider, Tab, Tabs, Typography, useTheme } from "@mui/material";
+import { RichTreeView, TreeItem2, TreeViewBaseItem } from "@mui/x-tree-view";
 import { invoke } from "@tauri-apps/api/tauri";
 import { registerCopilot } from "monacopilot";
 import { useEffect, useState } from "react";
 import Column from "./components/Column";
 import Row from "./components/Row";
-import { Article, Folder, FolderOpen } from "@mui/icons-material";
 
 const MUI_X_PRODUCTS: TreeViewBaseItem[] = [
   {
