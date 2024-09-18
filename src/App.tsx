@@ -1,75 +1,55 @@
-import Editor, { useMonaco } from "@monaco-editor/react";
-import { ChevronLeftOutlined, CloudOutlined, Extension, ExtensionOutlined, FileCopyOutlined, Folder, FolderOpen, MenuOutlined, SearchOutlined } from "@mui/icons-material";
+import Editor from "@monaco-editor/react";
+import { ChevronLeftOutlined, CloudOutlined, Extension, ExtensionOutlined, FileCopyOutlined, Folder, FolderOpen, MenuOutlined, OpenInBrowserOutlined, SearchOutlined } from "@mui/icons-material";
 import { TabContext, TabList, TabPanel } from "@mui/lab";
 import { Divider, IconButton, InputAdornment, ListItemButton, ListItemIcon, ListItemText, Tab, Tabs, TextField, Typography } from "@mui/material";
-import { RichTreeView, TreeItem2, TreeViewBaseItem } from "@mui/x-tree-view";
-import { invoke } from "@tauri-apps/api/tauri";
+import { RichTreeView, TreeItem2 } from "@mui/x-tree-view";
+import { open } from '@tauri-apps/api/dialog';
+import { FileEntry, readDir, readTextFile } from '@tauri-apps/api/fs';
 import { registerCopilot } from "monacopilot";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocalStorage } from "usehooks-ts";
 import Column from "./components/Column";
 import Row from "./components/Row";
-
-const MUI_X_PRODUCTS: TreeViewBaseItem[] = [
-  {
-    id: "grid",
-    label: "Data Grid",
-    children: [
-      { id: "grid-community", label: "@mui/x-data-grid" },
-      { id: "grid-pro", label: "@mui/x-data-grid-pro" },
-      { id: "grid-premium", label: "@mui/x-data-grid-premium" },
-    ],
-  },
-  {
-    id: "pickers",
-    label: "Date and Time Pickers",
-    children: [
-      { id: "pickers-community", label: "@mui/x-date-pickers" },
-      { id: "pickers-pro", label: "@mui/x-date-pickers-pro" },
-    ],
-  },
-  {
-    id: "charts",
-    label: "Charts",
-    children: [{ id: "charts-community", label: "@mui/x-charts" }],
-  },
-  {
-    id: "tree-view",
-    label: "Tree View",
-    children: [{ id: "tree-view-community", label: "@mui/x-tree-view" }],
-  },
-];
+import { invoke } from "@tauri-apps/api";
+import { listen } from "@tauri-apps/api/event";
 
 function App() {
   const [tab, setTab] = useState("file");
   const [file, setFile] = useState("0");
 
+  const [root, setRoot] = useLocalStorage<string>('root', '');
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
 
-  const monaco = useMonaco();
+  const hierarchy = useMemo(() => {
+    return files.map((file) => ({
+      id: file.path,
+      label: file.name,
+      children: [],
+    }));
+  }, [files]);
 
   useEffect(() => {
-    if (monaco) {
-      // TypeScript 컴파일러 설정 적용 (tsconfig.json의 설정 반영)
-      monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-        jsx: monaco.languages.typescript.JsxEmit.React, // JSX 지원 설정
-        target: monaco.languages.typescript.ScriptTarget.ESNext, // 최신 ESNext 문법 사용
-        module: monaco.languages.typescript.ModuleKind.ESNext,  // ESNext 모듈 시스템 사용
-        allowJs: true,  // JavaScript 파일도 허용
-        strict: true,  // 엄격한 타입 검사 설정
-        noImplicitAny: true,  // any 타입 암시적 사용 금지
-      });
-
-      monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
-        noSemanticValidation: false,
-        noSyntaxValidation: false
+    if (root) {
+      invoke('load_project_directory_async', { path: root });
+      readDir(root).then((files) => {
+        setFiles(files);
       });
     }
-  }, [monaco]);
+  }, [root]);
 
   useEffect(() => {
-    invoke("read_file", {
-      path: "/Users/imjunhyeog/Documents/Workspaces/solmi/README.md",
-    }).then((res) => {
-      console.log(res);
+    if (selected) {
+      readTextFile(selected).then((text) => {
+        console.log(text);
+      });
+    }
+  }, [selected]);
+
+  useEffect(() => {
+    invoke('run_command', { command: 'ls -al /' });
+    listen('command-output', (event) => {
+      console.log(event.payload);
     });
   }, []);
 
@@ -78,8 +58,13 @@ function App() {
       <Column width={300}>
         <TabContext value={tab}>
           <Row p='8px' alignItems='center'>
-            <Typography variant="subtitle2" fontWeight='bold'>
-              solmi
+            <Typography variant="subtitle2" fontWeight='bold' onClick={async () => {
+              const root = await open({ directory: true, multiple: false });
+              if (!root) return;
+
+              setRoot(root as string);
+            }}>
+              {root?.split('/').pop() ?? 'No Project'}
             </Typography>
             <Row flex="1" />
             <IconButton size="small">
@@ -99,7 +84,7 @@ function App() {
               <Column height='fit-content'>
                 <TabPanel value="file" sx={{ p: '8px 0' }}>
                   <RichTreeView
-                    items={MUI_X_PRODUCTS}
+                    items={hierarchy}
                     slots={{ item: TreeItem2 }}
                     slotProps={{
                       item: {
@@ -121,6 +106,7 @@ function App() {
                         }
                       }
                     }}
+                    onItemClick={(_, itemId) => setSelected(itemId)}
                   />
                 </TabPanel>
                 <TabPanel value="search" sx={{ p: '8px 0' }}>
@@ -183,14 +169,30 @@ class Foo {
 }
 `}
               onMount={(editor, monaco) => {
-                // registerCopilot(monaco, editor, {
-                //   endpoint: "https://solmi.vercel.app/api/complete",
-                //   language: "typescript",
-                // });
+                monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+                  jsx: monaco.languages.typescript.JsxEmit.React, // JSX 지원 설정
+                  target: monaco.languages.typescript.ScriptTarget.ESNext, // 최신 ESNext 문법 사용
+                  module: monaco.languages.typescript.ModuleKind.ESNext,  // ESNext 모듈 시스템 사용
+                  allowJs: true,  // JavaScript 파일도 허용
+                  strict: true,  // 엄격한 타입 검사 설정
+                  noImplicitAny: true,  // any 타입 암시적 사용 금지
+                });
+
+                monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+                  noSemanticValidation: false,
+                  noSyntaxValidation: false
+                });
+
+                registerCopilot(monaco, editor, {
+                  endpoint: "https://solmi.vercel.app/api/complete",
+                  language: "typescript",
+                });
               }}
               onChange={(value, e) => console.log(value, e)}
             />
           </Column>
+        </Column>
+        <Column height={200}>
         </Column>
       </Column>
     </Row>
