@@ -1,5 +1,5 @@
 import Editor from "@monaco-editor/react";
-import { ChevronLeftOutlined, CloudOutlined, Extension, ExtensionOutlined, FileCopyOutlined, Folder, FolderOpen, MenuOutlined, OpenInBrowserOutlined, SearchOutlined } from "@mui/icons-material";
+import { ChevronLeftOutlined, CloudOutlined, Extension, ExtensionOutlined, FileCopyOutlined, Folder, FolderOpen, MenuOutlined, SearchOutlined } from "@mui/icons-material";
 import { TabContext, TabList, TabPanel } from "@mui/lab";
 import { Divider, IconButton, InputAdornment, ListItemButton, ListItemIcon, ListItemText, Tab, Tabs, TextField, Typography } from "@mui/material";
 import { RichTreeView, TreeItem2 } from "@mui/x-tree-view";
