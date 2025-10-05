@@ -34,6 +34,8 @@ html, body {
   flex-direction: column;
   background-color: #21252b;
   border-right: 1px solid #181a1f;
+  position: relative;
+  flex-shrink: 0;
 }
 
 /* Activity Bar */
@@ -80,13 +82,33 @@ html, body {
 }
 
 .sidebar {
-  width: 280px;
   background-color: #21252b;
   display: flex;
   flex-direction: column;
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  width: 8px;
+  background-color: transparent;
+  cursor: ew-resize !important;
+  transition: background-color 0.2s;
+  position: absolute;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+}
+
+.sidebar-resize-handle:hover {
+  background-color: #007acc;
+}
+
+.sidebar-resize-handle:active {
+  background-color: #007acc;
 }
 
 .sidebar-header {

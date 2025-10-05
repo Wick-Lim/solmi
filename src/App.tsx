@@ -6,6 +6,7 @@ import Terminal from "./components/Terminal";
 import GitPanel from "./components/GitPanel";
 import SearchPanel from "./components/SearchPanel";
 import SettingsPanel from "./components/SettingsPanel";
+import AIPanel from "./components/AIPanel";
 // import configureMonacoTypings from 'monaco-editor-auto-typings';
 import "./App.css";
 
@@ -27,7 +28,10 @@ function App() {
   const [terminals, setTerminals] = useState<Array<{ id: number; name: string }>>([]);
   const [activeTerminal, setActiveTerminal] = useState<number | null>(null);
   const [terminalCounter, setTerminalCounter] = useState(0);
-  const [activePanel, setActivePanel] = useState<"files" | "git" | "search">("files");
+  const [activePanel, setActivePanel] = useState<"files" | "git" | "search" | "ai">("files");
+  const [selectedCode, setSelectedCode] = useState<string>("");
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [isResizing, setIsResizing] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [splitView, setSplitView] = useState(false);
@@ -41,6 +45,39 @@ function App() {
   });
   const editorRef = useRef<any>(null);
   const splitEditorRef = useRef<any>(null);
+
+  // Sidebar resize handlers
+  const handleMouseDown = () => {
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = e.clientX - 48; // 48 is activity bar width
+      if (newWidth >= 150 && newWidth <= 600) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (isResizing) {
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Define custom theme
   useEffect(() => {
@@ -344,6 +381,15 @@ function App() {
     // Store monaco globally for access in other functions
     (window as any).monaco = monaco;
 
+    // Track selection changes
+    editor.onDidChangeCursorSelection(() => {
+      const selection = editor.getSelection();
+      const selectedText = editor.getModel()?.getValueInRange(selection);
+      if (selectedText && selectedText.trim()) {
+        setSelectedCode(selectedText);
+      }
+    });
+
     // Configure TypeScript/JavaScript language features
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
       target: monaco.languages.typescript.ScriptTarget.ES2020,
@@ -602,7 +648,7 @@ function App() {
       )}
 
       {/* Sidebar with Activity Bar */}
-      <div className="sidebar-container">
+      <div className="sidebar-container" style={{ width: `${48 + sidebarWidth}px` }}>
         {/* Activity Bar */}
         <div className="activity-bar">
           <button
@@ -632,10 +678,17 @@ function App() {
               <path d="M13.62 2.38L12.24 1l-1.38 1.38L9.48 1l-1.38 1.38L6.72 1 5.34 2.38 4.96 2H2l-.5.5v11l.5.5h12l.5-.5V4.83l-.88-.45zm-.12 10.12h-11V3h1.34l1.37 1.38L6.6 5.76l1.38-1.38L9.36 5.76l1.38-1.38L12.12 5.76l1.38-1.38V12.5z"/>
             </svg>
           </button>
+          <button
+            className={activePanel === "ai" ? "active" : ""}
+            onClick={() => setActivePanel("ai")}
+            title="AI Assistant"
+          >
+            🤖
+          </button>
         </div>
 
         {/* Sidebar Panel */}
-        <div className="sidebar">
+        <div className="sidebar" style={{ width: `${sidebarWidth}px` }}>
           {activePanel === "files" && (
             <>
               <div className="sidebar-header">
@@ -659,6 +712,16 @@ function App() {
           {activePanel === "git" && (
             <GitPanel repoPath={currentFolder} onOpenFile={openFile} />
           )}
+          {activePanel === "ai" && (
+            <AIPanel selectedCode={selectedCode} filePath={openTabs[openTabs.length - 1] || ""} />
+          )}
+
+          {/* Resize Handle */}
+          <div
+            className="sidebar-resize-handle"
+            onMouseDown={handleMouseDown}
+            style={{ cursor: isResizing ? 'col-resize' : 'ew-resize' }}
+          />
         </div>
       </div>
 

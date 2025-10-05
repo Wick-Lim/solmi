@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use rusqlite::{Connection, params};
 
 #[derive(Serialize)]
@@ -357,6 +357,96 @@ async fn fts_search(folder_path: String, query: String) -> Result<Vec<FTSResult>
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+// AI Integration
+#[derive(Deserialize)]
+struct AIMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct ClaudeMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct ClaudeRequest {
+    model: String,
+    max_tokens: u32,
+    messages: Vec<ClaudeMessage>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeContent {
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct ClaudeResponse {
+    content: Vec<ClaudeContent>,
+}
+
+#[tauri::command]
+async fn ask_ai(api_key: String, messages: Vec<AIMessage>, context: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let client = reqwest::blocking::Client::new();
+
+        // 메시지 변환 및 컨텍스트 추가
+        let mut claude_messages: Vec<ClaudeMessage> = messages
+            .iter()
+            .map(|m| ClaudeMessage {
+                role: m.role.clone(),
+                content: if m.role == "user" && !context.is_empty() {
+                    format!("{}\n\n{}", context, m.content)
+                } else {
+                    m.content.clone()
+                },
+            })
+            .collect();
+
+        // 첫 메시지가 user가 아니면 시스템 메시지 추가
+        if claude_messages.is_empty() || claude_messages[0].role != "user" {
+            claude_messages.insert(0, ClaudeMessage {
+                role: "user".to_string(),
+                content: "You are a helpful coding assistant.".to_string(),
+            });
+        }
+
+        let request_body = ClaudeRequest {
+            model: "claude-3-5-sonnet-20241022".to_string(),
+            max_tokens: 4096,
+            messages: claude_messages,
+        };
+
+        let response = client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("API error: {}", error_text));
+        }
+
+        let claude_response: ClaudeResponse = response
+            .json()
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        claude_response
+            .content
+            .first()
+            .map(|c| c.text.clone())
+            .ok_or_else(|| "No response from AI".to_string())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -381,6 +471,7 @@ pub fn run() {
             search_in_files,
             index_project,
             fts_search,
+            ask_ai,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
