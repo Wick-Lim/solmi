@@ -90,6 +90,7 @@ html, body {
   min-height: 0;
   position: relative;
   pointer-events: auto;
+  width: 100%;
 }
 
 .sidebar-resize-handle {
