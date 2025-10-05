@@ -8,6 +8,13 @@ interface SearchResult {
   content: string;
 }
 
+interface FTSResult {
+  file_path: string;
+  line_number: number;
+  content: string;
+  language: string;
+}
+
 interface SearchPanelProps {
   folderPath: string;
   onResultClick: (file: string, line: number) => void;
@@ -17,20 +24,46 @@ export default function SearchPanel({ folderPath, onResultClick }: SearchPanelPr
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [useFTS, setUseFTS] = useState(true);
 
   async function handleSearch() {
     if (!query.trim() || !folderPath) return;
 
     setLoading(true);
+
     try {
-      const searchResults = await invoke<SearchResult[]>("search_in_files", {
-        folderPath,
-        query: query.trim(),
-      });
-      setResults(searchResults);
+      if (useFTS) {
+        // FTS 검색 (Rust에서 비동기 처리)
+        const ftsResults = await invoke<FTSResult[]>("fts_search", {
+          folderPath,
+          query: query.trim(),
+        });
+
+        const convertedResults: SearchResult[] = ftsResults.map(r => ({
+          file: r.file_path,
+          line: r.line_number,
+          content: r.content
+        }));
+
+        setResults(convertedResults);
+      } else {
+        // grep 방식 (Rust에서 비동기 처리)
+        const searchResults = await invoke<SearchResult[]>("search_in_files", {
+          folderPath,
+          query: query.trim(),
+        });
+        setResults(searchResults);
+      }
     } catch (error) {
       console.error("Search failed:", error);
-      setResults([]);
+      // FTS 실패 시 fallback
+      if (useFTS) {
+        console.log("FTS failed, trying grep fallback...");
+        setUseFTS(false);
+        handleSearch();
+      } else {
+        setResults([]);
+      }
     }
     setLoading(false);
   }
@@ -43,7 +76,7 @@ export default function SearchPanel({ folderPath, onResultClick }: SearchPanelPr
       <div className="search-input-container">
         <input
           type="text"
-          placeholder="Search in files..."
+          placeholder="Search in files... (supports: AND, OR, NOT, *)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyPress={(e) => e.key === "Enter" && handleSearch()}

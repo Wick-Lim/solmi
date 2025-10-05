@@ -6,7 +6,7 @@ import Terminal from "./components/Terminal";
 import GitPanel from "./components/GitPanel";
 import SearchPanel from "./components/SearchPanel";
 import SettingsPanel from "./components/SettingsPanel";
-import { configureMonacoTypings } from 'monaco-editor-auto-typings';
+// import configureMonacoTypings from 'monaco-editor-auto-typings';
 import "./App.css";
 
 interface FileNode {
@@ -31,16 +31,16 @@ function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [splitView, setSplitView] = useState(false);
-  const [splitFile, setSplitFile] = useState<string>("");
-  const [splitContent, setSplitContent] = useState<string>("");
+  const [splitFile] = useState<string>("");
+  const [splitContent] = useState<string>("");
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
     theme: "solmi-dark",
     fontSize: 14,
     tabSize: 2,
   });
-  const editorRef = useRef(null);
-  const splitEditorRef = useRef(null);
+  const editorRef = useRef<any>(null);
+  const splitEditorRef = useRef<any>(null);
 
   // Define custom theme
   useEffect(() => {
@@ -206,6 +206,11 @@ function App() {
         });
         setFileTree(result);
         setCurrentFolder(folderPath);
+
+        // 백그라운드에서 인덱싱 시작 (await 없이)
+        invoke<string>("index_project", { folderPath })
+          .then(msg => console.log("Search index ready:", msg))
+          .catch(err => console.warn("Indexing failed:", err));
       }
     } catch (error) {
       console.error("Failed to open folder:", error);
@@ -389,16 +394,16 @@ function App() {
     }
 
     // Configure auto-typings for npm packages
-    try {
-      await configureMonacoTypings(monaco, {
-        onlySpecifiedPackages: false,
-        shareCache: true,
-        versions: {}, // Will auto-detect from package.json if available
-      });
-      console.log('Auto-typings configured successfully');
-    } catch (error) {
-      console.warn('Failed to configure auto-typings:', error);
-    }
+    // try {
+    //   await configureMonacoTypings(monaco, {
+    //     onlySpecifiedPackages: false,
+    //     shareCache: true,
+    //     versions: {}, // Will auto-detect from package.json if available
+    //   });
+    //   console.log('Auto-typings configured successfully');
+    // } catch (error) {
+    //   console.warn('Failed to configure auto-typings:', error);
+    // }
   }
 
   async function loadProjectFiles(monaco: any, folderPath: string) {
@@ -508,17 +513,6 @@ function App() {
         (editorRef.current as any).setPosition({ lineNumber: line, column: 1 });
       }
     }, 100);
-  }
-
-  async function openInSplit(filepath: string) {
-    try {
-      const content = await invoke<string>("read_file", { path: filepath });
-      setSplitContent(content);
-      setSplitFile(filepath);
-      setSplitView(true);
-    } catch (error) {
-      console.error("Failed to open file in split:", error);
-    }
   }
 
   function createNewTerminal() {

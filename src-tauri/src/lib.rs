@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use serde::Serialize;
+use rusqlite::{Connection, params};
 
 #[derive(Serialize)]
 struct FileNode {
@@ -187,13 +188,18 @@ struct SearchResult {
 }
 
 #[tauri::command]
-fn search_in_files(folder_path: String, query: String) -> Result<Vec<SearchResult>, String> {
-    let path = PathBuf::from(folder_path);
-    let mut results = Vec::new();
+async fn search_in_files(folder_path: String, query: String) -> Result<Vec<SearchResult>, String> {
+    // 별도 스레드에서 실행
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(folder_path);
+        let mut results = Vec::new();
 
-    search_recursive(&path, &query, &mut results)?;
+        search_recursive(&path, &query, &mut results)?;
 
-    Ok(results)
+        Ok(results)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 fn search_recursive(dir: &PathBuf, query: &str, results: &mut Vec<SearchResult>) -> Result<(), String> {
@@ -228,6 +234,129 @@ fn search_recursive(dir: &PathBuf, query: &str, results: &mut Vec<SearchResult>)
     Ok(())
 }
 
+// FTS 기반 검색
+#[derive(Serialize)]
+struct FTSResult {
+    file_path: String,
+    line_number: i32,
+    content: String,
+    language: String,
+}
+
+#[tauri::command]
+async fn index_project(folder_path: String) -> Result<String, String> {
+    // 별도 스레드에서 실행
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = format!("{}/.solmi_search.db", folder_path);
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        // FTS5 테이블 생성
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS code_search USING fts5(
+                file_path UNINDEXED,
+                line_number UNINDEXED,
+                content,
+                language UNINDEXED
+            )",
+            [],
+        ).map_err(|e| format!("Failed to create FTS table: {}", e))?;
+
+        // 기존 데이터 삭제
+        conn.execute("DELETE FROM code_search", [])
+            .map_err(|e| format!("Failed to clear table: {}", e))?;
+
+        let path = PathBuf::from(&folder_path);
+        let mut indexed_count = 0;
+
+        fn index_dir(dir: &PathBuf, conn: &Connection, count: &mut i32) -> Result<(), String> {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+
+                    if let Some(name) = path.file_name() {
+                        let name_str = name.to_string_lossy();
+                        if name_str.starts_with('.') ||
+                           name_str == "node_modules" ||
+                           name_str == "dist" ||
+                           name_str == "build" ||
+                           name_str == "target" {
+                            continue;
+                        }
+                    }
+
+                    if path.is_dir() {
+                        index_dir(&path, conn, count)?;
+                    } else if path.is_file() {
+                        if let Some(ext) = path.extension() {
+                            let ext_str = ext.to_string_lossy().to_lowercase();
+                            if ["rs", "ts", "tsx", "js", "jsx", "css", "html", "json", "md", "txt", "toml", "yaml", "yml"].contains(&ext_str.as_str()) {
+                                if let Ok(content) = fs::read_to_string(&path) {
+                                    let file_path = path.to_string_lossy().to_string();
+
+                                    for (line_num, line) in content.lines().enumerate() {
+                                        if !line.trim().is_empty() {
+                                            conn.execute(
+                                                "INSERT INTO code_search (file_path, line_number, content, language) VALUES (?, ?, ?, ?)",
+                                                params![
+                                                    &file_path,
+                                                    (line_num + 1) as i32,
+                                                    line,
+                                                    ext_str.as_str()
+                                                ],
+                                            ).map_err(|e| format!("Failed to index line: {}", e))?;
+                                            *count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        index_dir(&path, &conn, &mut indexed_count)?;
+        Ok(format!("Indexed {} lines", indexed_count))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn fts_search(folder_path: String, query: String) -> Result<Vec<FTSResult>, String> {
+    // 별도 스레드에서 실행
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = format!("{}/.solmi_search.db", folder_path);
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let mut stmt = conn.prepare(
+            "SELECT file_path, line_number, content, language
+             FROM code_search
+             WHERE code_search MATCH ?
+             ORDER BY rank
+             LIMIT 100"
+        ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let results = stmt.query_map([&query], |row| {
+            Ok(FTSResult {
+                file_path: row.get(0)?,
+                line_number: row.get(1)?,
+                content: row.get(2)?,
+                language: row.get(3)?,
+            })
+        }).map_err(|e| format!("Failed to query: {}", e))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+        Ok(results)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -250,6 +379,8 @@ pub fn run() {
             git_push,
             git_pull,
             search_in_files,
+            index_project,
+            fts_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
