@@ -648,7 +648,7 @@ function App() {
       )}
 
       {/* Sidebar with Activity Bar */}
-      <div className="sidebar-container" style={{ width: `${48 + sidebarWidth}px` }}>
+      <div className="sidebar-container" style={{ width: `${48 + sidebarWidth}px`, position: 'relative' }}>
         {/* Activity Bar */}
         <div className="activity-bar">
           <button
@@ -715,14 +715,14 @@ function App() {
           {activePanel === "ai" && (
             <AIPanel selectedCode={selectedCode} filePath={openTabs[openTabs.length - 1] || ""} />
           )}
-
-          {/* Resize Handle */}
-          <div
-            className="sidebar-resize-handle"
-            onMouseDown={handleMouseDown}
-            style={{ cursor: isResizing ? 'col-resize' : 'ew-resize' }}
-          />
         </div>
+
+        {/* Resize Handle */}
+        <div
+          className="sidebar-resize-handle"
+          onMouseDown={handleMouseDown}
+          style={{ cursor: isResizing ? 'col-resize' : 'ew-resize' }}
+        />
       </div>
 
       {/* Main Editor Area */}
