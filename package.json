@@ -19,8 +19,8 @@
     "monaco-editor": "^0.53.0",
     "monaco-editor-auto-typings": "^0.4.6",
     "monaco-languageclient": "^10.1.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.1.2",
+    "react-dom": "^19.1.2",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver-protocol": "^3.17.5"
   },
